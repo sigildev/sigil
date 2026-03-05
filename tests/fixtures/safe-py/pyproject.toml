@@ -1,0 +1,7 @@
+[project]
+name = "safe-mcp-server"
+version = "1.0.0"
+requires-python = ">=3.11"
+
+[project.dependencies]
+mcp = ">=1.27.0"

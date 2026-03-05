@@ -1,0 +1,57 @@
+{
+  "name": "@sigildev/sigil",
+  "version": "0.1.2",
+  "description": "Security scanner for MCP (Model Context Protocol) servers — static analysis, trust scoring, and vulnerability detection",
+  "type": "module",
+  "bin": {
+    "sigil": "dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sigildev/sigil.git"
+  },
+  "main": "./dist/scanner.js",
+  "types": "./dist/scanner.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "security",
+    "scanner",
+    "model-context-protocol",
+    "static-analysis",
+    "sigil",
+    "trust-score",
+    "vulnerability",
+    "ai-safety"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "fast-glob": "^3.3.3",
+    "semver": "^7.7.1",
+    "tree-sitter": "^0.22.4",
+    "tree-sitter-python": "^0.23.6",
+    "typescript": "^5.7.3",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "@types/semver": "^7.5.8",
+    "tsx": "^4.19.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
