@@ -9,7 +9,7 @@ Deep static security analysis for MCP servers. Finds command injection, path tra
 
 ## The Problem
 
-MCP servers are the bridge between AI agents and the real world — file systems, databases, APIs, shell commands. They're also largely unaudited. Studies of MCP implementations found **43% vulnerable to command injection**, **82% using file operations prone to path traversal**, and **5.5% with active tool poisoning** in their descriptions. Existing scanners check tool descriptions and metadata. They don't read the source code. sigil does.
+MCP servers are the bridge between AI agents and the real world — file systems, databases, APIs, shell commands. They're also largely unaudited. Studies of MCP implementations found **34% using APIs prone to command injection**, **82% using file operations prone to path traversal**, and **5.5% with active tool poisoning** in their descriptions. Existing scanners check tool descriptions and metadata. They don't read the source code. sigil does.
 
 ## What sigil Does
 
