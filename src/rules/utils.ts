@@ -101,6 +101,12 @@ const PLACEHOLDER_PATTERNS = [
   /^my[-_]?(?:api[-_]?)?key/i,
   /^<.*>$/,
   /^\$\{/,
+  // Connection strings with placeholder credentials
+  /:\/\/user(?:name)?:pass(?:word)?@/i,
+  /:\/\/root:(?:root|password|pass|secret)@/i,
+  /:\/\/admin:(?:admin|password|pass|secret)@/i,
+  /:\/\/\w+:password@/i,
+  /:\/\/[^:]+:[^@]+@example\.com/i,
 ];
 
 /**

@@ -121,6 +121,11 @@ export function detectUnrestrictedFilesystem(context: AnalysisContext): Finding[
     /prefix/i,
     /whitelist/i,
     /allowlist/i,
+    /validate[_-]?path/i,
+    /check[_-]?path/i,
+    /sanitize[_-]?path/i,
+    /safe[_-]?path/i,
+    /allowed[_-]?paths/i,
   ];
 
   for (const [file, content] of context.sources) {

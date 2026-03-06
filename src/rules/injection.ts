@@ -32,6 +32,8 @@ const SQL_CONCAT_TS = [
   /(?:query|execute|prepare|raw)\s*\(\s*["'][^"']*["']\s*\+/g,
   /(?:query|execute|prepare|raw)\s*\([^)]*\+\s*["']/g,
   /(?:execute|cursor\.execute|\.query)\s*\(\s*f["']/g,
+  // Direct variable pass-through (.query(sql) without a string literal)
+  /\.query\s*\(\s*(?!["'`])[a-zA-Z_]\w*\s*[,)]/g,
 ];
 
 const SQL_CONCAT_PY = [
@@ -39,6 +41,8 @@ const SQL_CONCAT_PY = [
   /(?:execute|cursor\.execute)\s*\(\s*["'][^"']*["']\s*%/g,
   /(?:execute|cursor\.execute)\s*\(\s*["'][^"']*["']\s*\.\s*format/g,
   /(?:execute|cursor\.execute)\s*\(\s*["'][^"']*["']\s*\+/g,
+  // Direct variable pass-through (cursor.execute(sql) without a string literal)
+  /(?:cursor\.execute|\.execute)\s*\(\s*(?!["'f])[a-zA-Z_]\w*\s*[,)]/g,
 ];
 
 // File operation patterns without validation
@@ -70,6 +74,11 @@ const PATH_SAFE_PATTERNS = [
   /base_dir/i,
   /root_dir/i,
   /prefix.*check/i,
+  /validate[_-]?path/i,
+  /check[_-]?path/i,
+  /sanitize[_-]?path/i,
+  /safe[_-]?path/i,
+  /allowed[_-]?paths/i,
 ];
 
 function hasPathValidation(content: string, matchIndex: number): boolean {
