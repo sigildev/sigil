@@ -1,8 +1,5 @@
 import type { AnalysisContext, Finding } from "../analyzers/types.js";
-
-function findLineNumber(content: string, index: number): number {
-  return content.slice(0, index).split("\n").length;
-}
+import { findLineNumber, shouldSkipFile, isComment } from "./utils.js";
 
 export function detectDebugMode(context: AnalysisContext): Finding[] {
   const findings: Finding[] = [];
@@ -17,6 +14,8 @@ export function detectDebugMode(context: AnalysisContext): Finding[] {
   ];
 
   for (const [file, content] of context.sources) {
+    if (shouldSkipFile(file)) continue;
+
     for (const pattern of DEBUG_PATTERNS) {
       pattern.lastIndex = 0;
       let match;
@@ -24,8 +23,7 @@ export function detectDebugMode(context: AnalysisContext): Finding[] {
         const line = findLineNumber(content, match.index);
         const lineContent = content.split("\n")[line - 1] || "";
 
-        const trimmed = lineContent.trimStart();
-        if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("*")) continue;
+        if (isComment(lineContent)) continue;
 
         // Skip if it's in a conditional check (e.g., if (NODE_ENV === 'development'))
         if (/if\s*\(/.test(lineContent) || /if\s+/.test(lineContent)) continue;
@@ -69,6 +67,8 @@ export function detectVerboseErrors(context: AnalysisContext): Finding[] {
     [...VERBOSE_PATTERNS_TS, ...VERBOSE_PATTERNS_PY];
 
   for (const [file, content] of context.sources) {
+    if (shouldSkipFile(file)) continue;
+
     for (const pattern of patterns) {
       pattern.lastIndex = 0;
       let match;
@@ -76,8 +76,7 @@ export function detectVerboseErrors(context: AnalysisContext): Finding[] {
         const line = findLineNumber(content, match.index);
         const lineContent = content.split("\n")[line - 1] || "";
 
-        const trimmed = lineContent.trimStart();
-        if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("*")) continue;
+        if (isComment(lineContent)) continue;
 
         // Only flag if it's in a catch block or error handler that returns to client
         const before = content.slice(Math.max(0, match.index - 500), match.index);
@@ -117,6 +116,8 @@ export function detectInsecureTransport(context: AnalysisContext): Finding[] {
   ];
 
   for (const [file, content] of context.sources) {
+    if (shouldSkipFile(file)) continue;
+
     for (const { pattern, label } of TRANSPORT_PATTERNS) {
       pattern.lastIndex = 0;
       let match;
@@ -124,8 +125,7 @@ export function detectInsecureTransport(context: AnalysisContext): Finding[] {
         const line = findLineNumber(content, match.index);
         const lineContent = content.split("\n")[line - 1] || "";
 
-        const trimmed = lineContent.trimStart();
-        if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("*")) continue;
+        if (isComment(lineContent)) continue;
 
         findings.push({
           ruleId: "MCS-CFG-003",

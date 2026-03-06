@@ -1,4 +1,10 @@
 import type { AnalysisContext, Finding } from "../analyzers/types.js";
+import {
+  findLineNumber,
+  isInToolHandler,
+  shouldSkipFile,
+  isComment,
+} from "./utils.js";
 
 // Patterns that expose entire environment
 const ENV_EXPOSURE_TS = [
@@ -13,10 +19,6 @@ const ENV_EXPOSURE_PY = [
   /json\.dumps\s*\(\s*(?:dict\s*\(\s*)?os\.environ/g,
 ];
 
-function findLineNumber(content: string, index: number): number {
-  return content.slice(0, index).split("\n").length;
-}
-
 export function detectEnvVarExposure(context: AnalysisContext): Finding[] {
   const findings: Finding[] = [];
   const patterns =
@@ -25,6 +27,8 @@ export function detectEnvVarExposure(context: AnalysisContext): Finding[] {
     [...ENV_EXPOSURE_TS, ...ENV_EXPOSURE_PY];
 
   for (const [file, content] of context.sources) {
+    if (shouldSkipFile(file)) continue;
+
     for (const pattern of patterns) {
       pattern.lastIndex = 0;
       let match;
@@ -32,8 +36,10 @@ export function detectEnvVarExposure(context: AnalysisContext): Finding[] {
         const line = findLineNumber(content, match.index);
         const lineContent = content.split("\n")[line - 1] || "";
 
-        const trimmed = lineContent.trimStart();
-        if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("*")) continue;
+        if (isComment(lineContent)) continue;
+
+        // Only flag if in a tool handler context
+        if (!isInToolHandler(content, match.index, context.language)) continue;
 
         findings.push({
           ruleId: "MCS-DATA-001",
@@ -65,6 +71,7 @@ export function detectCredentialLeakage(context: AnalysisContext): Finding[] {
   // This rule is hard to detect well with regex alone — keep it conservative
   // Flag cases where raw HTTP response objects are returned in tool responses
   for (const [file, content] of context.sources) {
+    if (shouldSkipFile(file)) continue;
     // Look for tool handlers that return raw response data
     const toolHandlerRegex = /\.tool\s*\([^)]*\)\s*[^{]*\{[\s\S]*?return\s*\{[\s\S]*?content/g;
     let handlerMatch;

@@ -1,4 +1,10 @@
 import type { AnalysisContext, Finding } from "../analyzers/types.js";
+import {
+  findLineNumber,
+  isInToolHandler,
+  shouldSkipFile,
+  isComment,
+} from "./utils.js";
 
 // Unrestricted outbound HTTP patterns
 const BROAD_HTTP_PATTERNS = [
@@ -40,10 +46,6 @@ const CODE_EXEC_PATTERNS_PY = [
   /\b__import__\s*\(/g,
 ];
 
-function findLineNumber(content: string, index: number): number {
-  return content.slice(0, index).split("\n").length;
-}
-
 function hasHostValidation(content: string, matchIndex: number): boolean {
   const start = Math.max(0, matchIndex - 800);
   const end = Math.min(content.length, matchIndex + 300);
@@ -55,6 +57,8 @@ export function detectBroadCapabilities(context: AnalysisContext): Finding[] {
   const findings: Finding[] = [];
 
   for (const [file, content] of context.sources) {
+    if (shouldSkipFile(file)) continue;
+
     for (const pattern of BROAD_HTTP_PATTERNS) {
       pattern.lastIndex = 0;
       let match;
@@ -62,10 +66,12 @@ export function detectBroadCapabilities(context: AnalysisContext): Finding[] {
         const line = findLineNumber(content, match.index);
         const lineContent = content.split("\n")[line - 1] || "";
 
-        const trimmed = lineContent.trimStart();
-        if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("*")) continue;
+        if (isComment(lineContent)) continue;
 
         if (hasHostValidation(content, match.index)) continue;
+
+        // Only flag if in a tool handler context
+        if (!isInToolHandler(content, match.index, context.language)) continue;
 
         findings.push({
           ruleId: "MCS-PERM-001",
@@ -87,10 +93,6 @@ export function detectBroadCapabilities(context: AnalysisContext): Finding[] {
 
 export function detectUnrestrictedFilesystem(context: AnalysisContext): Finding[] {
   const findings: Finding[] = [];
-
-  // This is handled by MCS-INJ-003 (path traversal) — they overlap.
-  // MCS-PERM-002 specifically flags file tools with no allowlist at all.
-  // We look for file read/write in tool handlers without any path restriction.
 
   const FS_PATTERNS_TS = [
     /\bfs\.readFileSync\s*\(\s*(?!["'`])\w+/g,
@@ -122,6 +124,8 @@ export function detectUnrestrictedFilesystem(context: AnalysisContext): Finding[
   ];
 
   for (const [file, content] of context.sources) {
+    if (shouldSkipFile(file)) continue;
+
     for (const pattern of patterns) {
       pattern.lastIndex = 0;
       let match;
@@ -129,14 +133,16 @@ export function detectUnrestrictedFilesystem(context: AnalysisContext): Finding[
         const line = findLineNumber(content, match.index);
         const lineContent = content.split("\n")[line - 1] || "";
 
-        const trimmed = lineContent.trimStart();
-        if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("*")) continue;
+        if (isComment(lineContent)) continue;
 
         // Check for restrictions in surrounding context
         const start = Math.max(0, match.index - 800);
         const end = Math.min(content.length, match.index + 300);
         const ctx = content.slice(start, end);
         if (RESTRICT_PATTERNS.some((p) => p.test(ctx))) continue;
+
+        // Only flag if in a tool handler context
+        if (!isInToolHandler(content, match.index, context.language)) continue;
 
         findings.push({
           ruleId: "MCS-PERM-002",
@@ -163,6 +169,8 @@ export function detectArbitraryCodeExecution(context: AnalysisContext): Finding[
     [...CODE_EXEC_PATTERNS_TS, ...CODE_EXEC_PATTERNS_PY];
 
   for (const [file, content] of context.sources) {
+    if (shouldSkipFile(file)) continue;
+
     for (const pattern of patterns) {
       pattern.lastIndex = 0;
       let match;
@@ -170,17 +178,19 @@ export function detectArbitraryCodeExecution(context: AnalysisContext): Finding[
         const line = findLineNumber(content, match.index);
         const lineContent = content.split("\n")[line - 1] || "";
 
-        const trimmed = lineContent.trimStart();
-        if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("*")) continue;
+        if (isComment(lineContent)) continue;
 
         // In Python, exec() with a string literal is less dangerous — skip those
         if (context.language === "python" && /\bexec\s*\(\s*["']/.test(lineContent)) continue;
+
+        // Only flag if in a tool handler context
+        if (!isInToolHandler(content, match.index, context.language)) continue;
 
         findings.push({
           ruleId: "MCS-PERM-003",
           severity: "critical",
           title: "Tool Can Execute Arbitrary Code",
-          message: `Code evaluation function (eval/exec/Function) found. If tool input reaches this, it enables arbitrary code execution.`,
+          message: `Code evaluation function (eval/exec/Function) detected in tool handler context. If tool input reaches this, it enables arbitrary code execution.`,
           location: { file, startLine: line, endLine: line },
           fix: {
             description: "Remove eval/exec usage. Use an allowlist of permitted operations instead of evaluating user input as code.",

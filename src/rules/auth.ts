@@ -1,4 +1,10 @@
 import type { AnalysisContext, Finding } from "../analyzers/types.js";
+import {
+  findLineNumber,
+  shouldSkipFile,
+  isPlaceholderCredential,
+  isComment,
+} from "./utils.js";
 
 const CREDENTIAL_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /["'`](sk-[a-zA-Z0-9_-]{20,})["'`]/g, label: "OpenAI API key" },
@@ -21,14 +27,13 @@ const CREDENTIAL_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----/g, label: "Private key" },
 ];
 
-function findLineNumber(content: string, index: number): number {
-  return content.slice(0, index).split("\n").length;
-}
-
 export function detectHardcodedCredentials(context: AnalysisContext): Finding[] {
   const findings: Finding[] = [];
 
   for (const [file, content] of context.sources) {
+    // Skip test fixtures — they intentionally contain fake credentials
+    if (shouldSkipFile(file)) continue;
+
     const lines = content.split("\n");
 
     for (const { pattern, label } of CREDENTIAL_PATTERNS) {
@@ -37,13 +42,15 @@ export function detectHardcodedCredentials(context: AnalysisContext): Finding[] 
       while ((match = pattern.exec(content)) !== null) {
         const lineNumber = findLineNumber(content, match.index);
         const line = lines[lineNumber - 1] || "";
-        const trimmed = line.trimStart();
 
-        // Skip comments
-        if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("*")) continue;
+        if (isComment(line)) continue;
 
         // Skip env var references
         if (/process\.env|os\.environ|getenv|ENV\[/.test(line)) continue;
+
+        // Skip test/placeholder values
+        const matchedValue = match[1] || match[0];
+        if (isPlaceholderCredential(matchedValue)) continue;
 
         findings.push({
           ruleId: "MCS-AUTH-001",
@@ -69,6 +76,9 @@ export function detectSecretsInConfig(context: AnalysisContext): Finding[] {
   for (const entry of context.configEntries) {
     if (!entry.env) continue;
     for (const [key, value] of Object.entries(entry.env)) {
+      // Skip placeholder values
+      if (isPlaceholderCredential(value)) continue;
+
       const looksLikeSecret =
         /key|token|secret|password|credential|auth/i.test(key) &&
         !value.startsWith("$") &&

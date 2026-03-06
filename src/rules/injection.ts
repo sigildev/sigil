@@ -1,4 +1,10 @@
 import type { AnalysisContext, Finding } from "../analyzers/types.js";
+import {
+  findLineNumber,
+  isInToolHandler,
+  shouldSkipFile,
+  isComment,
+} from "./utils.js";
 
 // Dangerous shell execution sinks (TS/JS)
 const EXEC_PATTERNS_TS = [
@@ -22,12 +28,9 @@ const EXEC_PATTERNS_PY = [
 
 // SQL injection patterns
 const SQL_CONCAT_TS = [
-  // Template literal with variable in SQL context
   /(?:query|execute|prepare|raw)\s*\(\s*`[^`]*\$\{/g,
-  // String concatenation in SQL context
   /(?:query|execute|prepare|raw)\s*\(\s*["'][^"']*["']\s*\+/g,
   /(?:query|execute|prepare|raw)\s*\([^)]*\+\s*["']/g,
-  // f-string SQL (Python)
   /(?:execute|cursor\.execute|\.query)\s*\(\s*f["']/g,
 ];
 
@@ -69,42 +72,7 @@ const PATH_SAFE_PATTERNS = [
   /prefix.*check/i,
 ];
 
-function findLineNumber(content: string, index: number): number {
-  return content.slice(0, index).split("\n").length;
-}
-
-function isInToolHandler(content: string, matchIndex: number, language: string): boolean {
-  // Look backwards from the match for a tool registration pattern
-  const before = content.slice(Math.max(0, matchIndex - 2000), matchIndex);
-
-  if (language === "typescript" || language === "unknown") {
-    // Check for .tool( pattern
-    if (/\.tool\s*\(/g.test(before)) {
-      // Make sure we're not past the end of that handler
-      // Simple heuristic: count braces
-      const lastToolIndex = before.lastIndexOf(".tool(");
-      if (lastToolIndex !== -1) {
-        const afterTool = before.slice(lastToolIndex);
-        const opens = (afterTool.match(/\{/g) || []).length;
-        const closes = (afterTool.match(/\}/g) || []).length;
-        // If we haven't closed all the braces, we're still in the handler
-        if (opens > closes) return true;
-      }
-    }
-  }
-
-  if (language === "python" || language === "unknown") {
-    // Check for @mcp.tool() or @server.tool() decorator
-    if (/@\w+\.tool\s*\(/g.test(before)) return true;
-    if (/def\s+\w+.*->/.test(before)) return true;
-  }
-
-  // Fallback: if it's in a server file, consider it relevant
-  return true;
-}
-
 function hasPathValidation(content: string, matchIndex: number): boolean {
-  // Check surrounding context (200 chars before and after) for validation patterns
   const start = Math.max(0, matchIndex - 500);
   const end = Math.min(content.length, matchIndex + 500);
   const context = content.slice(start, end);
@@ -120,6 +88,9 @@ export function detectCommandInjection(context: AnalysisContext): Finding[] {
     [...EXEC_PATTERNS_TS, ...EXEC_PATTERNS_PY];
 
   for (const [file, content] of context.sources) {
+    // Skip non-server files (scripts, CLI, tests, etc.)
+    if (shouldSkipFile(file)) continue;
+
     for (const pattern of patterns) {
       pattern.lastIndex = 0;
       let match;
@@ -127,9 +98,7 @@ export function detectCommandInjection(context: AnalysisContext): Finding[] {
         const line = findLineNumber(content, match.index);
         const lineContent = content.split("\n")[line - 1] || "";
 
-        // Skip if it's a comment
-        const trimmed = lineContent.trimStart();
-        if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("*")) continue;
+        if (isComment(lineContent)) continue;
 
         // Skip if using execFile (safe — no shell)
         if (/execFile/.test(lineContent)) continue;
@@ -141,11 +110,14 @@ export function detectCommandInjection(context: AnalysisContext): Finding[] {
         if (/\bimport\b/.test(lineContent) || /\brequire\b/.test(lineContent)) continue;
         if (/\bpromisify\s*\(\s*exec\s*\)/.test(lineContent)) continue;
 
+        // Only flag if in a tool handler context
+        if (!isInToolHandler(content, match.index, context.language)) continue;
+
         findings.push({
           ruleId: "MCS-INJ-001",
           severity: "critical",
           title: "Command Injection via Tool Input",
-          message: `Potential shell command execution found. If tool input reaches this call, it enables arbitrary command execution.`,
+          message: `Shell command execution pattern detected in tool handler context. If tool input reaches this call, it enables arbitrary command execution.`,
           location: { file, startLine: line, endLine: line },
           fix: {
             description: "Use execFile() with an argument array instead of exec(). Allowlist permitted commands.",
@@ -167,6 +139,8 @@ export function detectSqlInjection(context: AnalysisContext): Finding[] {
     [...SQL_CONCAT_TS, ...SQL_CONCAT_PY];
 
   for (const [file, content] of context.sources) {
+    if (shouldSkipFile(file)) continue;
+
     for (const pattern of patterns) {
       pattern.lastIndex = 0;
       let match;
@@ -174,8 +148,10 @@ export function detectSqlInjection(context: AnalysisContext): Finding[] {
         const line = findLineNumber(content, match.index);
         const lineContent = content.split("\n")[line - 1] || "";
 
-        const trimmed = lineContent.trimStart();
-        if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("*")) continue;
+        if (isComment(lineContent)) continue;
+
+        // Only flag if in a tool handler context
+        if (!isInToolHandler(content, match.index, context.language)) continue;
 
         findings.push({
           ruleId: "MCS-INJ-002",
@@ -203,6 +179,8 @@ export function detectPathTraversal(context: AnalysisContext): Finding[] {
     [...PATH_TRAVERSAL_TS, ...PATH_TRAVERSAL_PY];
 
   for (const [file, content] of context.sources) {
+    if (shouldSkipFile(file)) continue;
+
     for (const pattern of patterns) {
       pattern.lastIndex = 0;
       let match;
@@ -210,8 +188,7 @@ export function detectPathTraversal(context: AnalysisContext): Finding[] {
         const line = findLineNumber(content, match.index);
         const lineContent = content.split("\n")[line - 1] || "";
 
-        const trimmed = lineContent.trimStart();
-        if (trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("*")) continue;
+        if (isComment(lineContent)) continue;
 
         // Skip if there's path validation nearby
         if (hasPathValidation(content, match.index)) continue;
