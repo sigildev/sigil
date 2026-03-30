@@ -79,6 +79,16 @@ export function detectCredentialLeakage(context: AnalysisContext): Finding[] {
       const handlerText = handlerMatch[0];
       // Check if the handler returns raw response headers (may contain auth tokens)
       if (/headers/.test(handlerText) && /JSON\.stringify/.test(handlerText)) {
+        // Skip if headers are only used for OUTGOING requests (setting auth, not leaking it)
+        // Look for patterns like: headers: { Authorization, fetch(..., { headers, request.headers
+        const outgoingPatterns = /(?:fetch|axios|request|httpx|requests)\s*\([^)]*headers|headers\s*[:=]\s*\{[^}]*(?:Authorization|Bearer|api.key|token)/i;
+        const returnPatterns = /response\.headers|res\.headers|\.headers\b[^:=]/;
+        const hasOutgoing = outgoingPatterns.test(handlerText);
+        const hasReturnHeaders = returnPatterns.test(handlerText);
+
+        // Only flag if response headers are returned, not just outgoing request headers
+        if (hasOutgoing && !hasReturnHeaders) continue;
+
         const line = findLineNumber(content, handlerMatch.index);
         findings.push({
           ruleId: "MCS-DATA-002",

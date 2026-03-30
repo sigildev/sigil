@@ -1,13 +1,11 @@
 import type { AnalysisContext, Finding } from "../analyzers/types.js";
-
-function findLineNumber(content: string, index: number): number {
-  return content.slice(0, index).split("\n").length;
-}
+import { findLineNumber, shouldSkipFile } from "./utils.js";
 
 export function detectMissingInputSchema(context: AnalysisContext): Finding[] {
   const findings: Finding[] = [];
 
   for (const [file, content] of context.sources) {
+    if (shouldSkipFile(file)) continue;
     if (context.language === "typescript" || context.language === "unknown") {
       // Detect z.any() or z.unknown() in tool schemas — these accept anything without validation
       const weakTypeRegex = /z\.(?:any|unknown)\s*\(\)/g;

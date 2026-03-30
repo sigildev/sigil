@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name("sigil")
   .description("Security scanner for MCP (Model Context Protocol) servers")
-  .version("0.1.3")
+  .version("0.2.2")
   .argument("<target>", "Path to MCP server directory, file, or config")
   .option("-o, --output <format>", "Output format: text, json, sarif", "text")
   .option(

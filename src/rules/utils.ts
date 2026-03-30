@@ -24,6 +24,15 @@ const SKIP_FILE_PATTERNS = [
   /\b\.github\//,
   /\bcli\//i,
   /\bbin\//i,
+  /\btests?\//i,
+  // Python test files
+  /\btest_[^/]*\.py$/i,
+  /\b[^/]*_test\.py$/i,
+  /\bconftest\.py$/i,
+  // TS/JS test files
+  /\.(?:test|spec)\.[tj]sx?$/i,
+  // Sandbox/container isolation (expected to run arbitrary code)
+  /\bsandbox[-_]?container/i,
 ];
 
 /**
@@ -114,6 +123,32 @@ const PLACEHOLDER_PATTERNS = [
  */
 export function isPlaceholderCredential(value: string): boolean {
   return PLACEHOLDER_PATTERNS.some((p) => p.test(value));
+}
+
+/**
+ * Detects if the server's primary purpose is code/command execution.
+ * Such servers shouldn't be flagged for INJ-001 (command injection) or
+ * PERM-003 (arbitrary code execution) since that's their intended function.
+ */
+const CODE_EXECUTOR_NAME_PATTERNS = [
+  /\bbash\b/i,
+  /\bshell\b/i,
+  /\bterminal\b/i,
+  /\brepl\b/i,
+  /\bsandbox\b/i,
+  /\bcode[-_]?runner\b/i,
+  /\bcode[-_]?exec/i,
+  /\binterpreter\b/i,
+  /\bcommand[-_]?runner\b/i,
+];
+
+export function isCodeExecutorServer(context: {
+  manifest?: { name?: string };
+}): boolean {
+  // Only match servers whose primary purpose (per package name) is code/command execution.
+  // Individual exec tools in a multi-purpose server should still be flagged.
+  const name = context.manifest?.name ?? "";
+  return CODE_EXECUTOR_NAME_PATTERNS.some((p) => p.test(name));
 }
 
 export function isComment(line: string): boolean {

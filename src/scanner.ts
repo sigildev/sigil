@@ -14,7 +14,7 @@ import { parseConfig } from "./discovery/config-parser.js";
 import { rules } from "./rules/index.js";
 import { detectVulnerableDeps } from "./rules/deps.js";
 
-const PKG_VERSION = "0.1.3";
+const PKG_VERSION = "0.2.2";
 
 export interface ScanOptions {
   minSeverity?: Severity;

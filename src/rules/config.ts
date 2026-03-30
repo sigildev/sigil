@@ -9,7 +9,10 @@ export function detectDebugMode(context: AnalysisContext): Finding[] {
     /\bdebug\s*[:=]\s*true/g,
     /NODE_ENV\s*[:=!]=?\s*["']development["']/g,
     /\.use\s*\(\s*\w*[Dd]ebug/g,
-    /logging\.DEBUG/g,
+    // Python: only match actual debug enablement, not constant references
+    /\bbasicConfig\s*\([^)]*level\s*=\s*logging\.DEBUG/g,
+    /\bsetLevel\s*\(\s*logging\.DEBUG\s*\)/g,
+    /\blevel\s*=\s*logging\.DEBUG\b/g,
     /log_level\s*=\s*["']debug["']/gi,
   ];
 
@@ -27,6 +30,10 @@ export function detectDebugMode(context: AnalysisContext): Finding[] {
 
         // Skip if it's in a conditional check (e.g., if (NODE_ENV === 'development'))
         if (/if\s*\(/.test(lineContent) || /if\s+/.test(lineContent)) continue;
+
+        // Skip Python logging.DEBUG constant references (dict lookups, comparisons, isEnabledFor)
+        if (/isEnabledFor\s*\(\s*logging\.DEBUG/.test(lineContent)) continue;
+        if (/logging\.DEBUG\s*[:\]}),]/.test(lineContent) && !/level\s*=/.test(lineContent)) continue;
 
         findings.push({
           ruleId: "MCS-CFG-001",

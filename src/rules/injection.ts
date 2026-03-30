@@ -4,6 +4,7 @@ import {
   isInToolHandler,
   shouldSkipFile,
   isComment,
+  isCodeExecutorServer,
 } from "./utils.js";
 
 // Dangerous shell execution sinks (TS/JS)
@@ -41,8 +42,9 @@ const SQL_CONCAT_PY = [
   /(?:execute|cursor\.execute)\s*\(\s*["'][^"']*["']\s*%/g,
   /(?:execute|cursor\.execute)\s*\(\s*["'][^"']*["']\s*\.\s*format/g,
   /(?:execute|cursor\.execute)\s*\(\s*["'][^"']*["']\s*\+/g,
-  // Direct variable pass-through (cursor.execute(sql) without a string literal)
-  /(?:cursor\.execute|\.execute)\s*\(\s*(?!["'f])[a-zA-Z_]\w*\s*[,)]/g,
+  // Direct variable pass-through (cursor/conn.execute(sql) without a string literal)
+  // Match known DB execution objects — not bare .execute() (matches session.execute, etc.)
+  /(?:cursor|conn|connection|db)\.execute\s*\(\s*(?!["'f])[a-zA-Z_]\w*\s*[,)]/g,
 ];
 
 // File operation patterns without validation
@@ -79,10 +81,14 @@ const PATH_SAFE_PATTERNS = [
   /sanitize[_-]?path/i,
   /safe[_-]?path/i,
   /allowed[_-]?paths/i,
+  /is[_-]?path[_-]?allowed/i,
+  /WORKING_DIR/,
+  /work(?:ing)?[_-]?dir(?:ectory)?/i,
+  /sandbox[_-]?(?:dir|path|root)/i,
 ];
 
 function hasPathValidation(content: string, matchIndex: number): boolean {
-  const start = Math.max(0, matchIndex - 500);
+  const start = Math.max(0, matchIndex - 1000);
   const end = Math.min(content.length, matchIndex + 500);
   const context = content.slice(start, end);
 
@@ -90,6 +96,9 @@ function hasPathValidation(content: string, matchIndex: number): boolean {
 }
 
 export function detectCommandInjection(context: AnalysisContext): Finding[] {
+  // Skip servers whose purpose is code/command execution
+  if (isCodeExecutorServer(context)) return [];
+
   const findings: Finding[] = [];
   const patterns =
     context.language === "python" ? EXEC_PATTERNS_PY :

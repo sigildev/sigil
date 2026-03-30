@@ -24,7 +24,7 @@ npx @sigildev/sigil .
 ```
 
 ```
-  Sigil v0.1.0
+  Sigil v0.2.2
 
   Scanning: ./my-mcp-server
   Language: TypeScript
@@ -199,7 +199,7 @@ Three-layer analysis pipeline. No dynamic analysis — the scanner never runs yo
 
 1. **Discovery** — Finds MCP server entry points, parses config files (`claude_desktop_config.json`, `.mcp.json`), reads `package.json`/`pyproject.toml`, discovers source files.
 2. **Analysis** — 16 rules run against source code:
-   - **Pattern Analyzer** — Context-aware regex detection for injection sinks, dangerous permissions, credential leaks, prompt injection, and configuration issues. Checks surrounding code context to reduce false positives.
+   - **Pattern Analyzer** — Tool-handler-scoped regex detection for injection sinks, dangerous permissions, credential leaks, prompt injection, and configuration issues. Only flags patterns found within MCP tool handler contexts (`.tool()`, `@mcp.tool()`), skips build scripts, CLI utilities, and test fixtures.
    - **Dependency Checker** — Parses dependency manifests, queries OSV.dev for known CVEs.
 3. **Reporting** — Aggregates findings, computes trust score, formats output.
 

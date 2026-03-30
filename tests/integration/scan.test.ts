@@ -184,7 +184,7 @@ describe("mcp-scanner integration", () => {
     it("should produce valid JSON output", async () => {
       const result = await scan(target);
       expect(result.scanner.name).toBe("sigil");
-      expect(result.scanner.version).toBe("0.1.3");
+      expect(result.scanner.version).toBe("0.2.2");
       expect(result.timestamp).toBeTruthy();
       expect(result.duration).toBeGreaterThanOrEqual(0);
     });

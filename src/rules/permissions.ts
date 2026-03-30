@@ -4,6 +4,7 @@ import {
   isInToolHandler,
   shouldSkipFile,
   isComment,
+  isCodeExecutorServer,
 } from "./utils.js";
 
 // Unrestricted outbound HTTP patterns
@@ -126,6 +127,10 @@ export function detectUnrestrictedFilesystem(context: AnalysisContext): Finding[
     /sanitize[_-]?path/i,
     /safe[_-]?path/i,
     /allowed[_-]?paths/i,
+    /is[_-]?path[_-]?allowed/i,
+    /WORKING_DIR/,
+    /work(?:ing)?[_-]?dir(?:ectory)?/i,
+    /sandbox[_-]?(?:dir|path|root)/i,
   ];
 
   for (const [file, content] of context.sources) {
@@ -141,8 +146,8 @@ export function detectUnrestrictedFilesystem(context: AnalysisContext): Finding[
         if (isComment(lineContent)) continue;
 
         // Check for restrictions in surrounding context
-        const start = Math.max(0, match.index - 800);
-        const end = Math.min(content.length, match.index + 300);
+        const start = Math.max(0, match.index - 1000);
+        const end = Math.min(content.length, match.index + 500);
         const ctx = content.slice(start, end);
         if (RESTRICT_PATTERNS.some((p) => p.test(ctx))) continue;
 
@@ -167,6 +172,9 @@ export function detectUnrestrictedFilesystem(context: AnalysisContext): Finding[
 }
 
 export function detectArbitraryCodeExecution(context: AnalysisContext): Finding[] {
+  // Skip servers whose purpose is code/command execution
+  if (isCodeExecutorServer(context)) return [];
+
   const findings: Finding[] = [];
   const patterns =
     context.language === "python" ? CODE_EXEC_PATTERNS_PY :

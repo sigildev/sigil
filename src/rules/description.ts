@@ -1,30 +1,26 @@
 import type { AnalysisContext, Finding } from "../analyzers/types.js";
+import { shouldSkipFile } from "./utils.js";
 
 // Prompt injection patterns in tool descriptions
 const INJECTION_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
-  // Override/ignore instructions
+  // Override/ignore instructions — clearly malicious
   { pattern: /ignore\s+(?:previous|prior|above|all)\s+instructions/i, label: "Instruction override pattern" },
   { pattern: /disregard\s+(?:previous|prior|above|all)/i, label: "Instruction override pattern" },
   { pattern: /forget\s+(?:your|all)\s+(?:previous\s+)?instructions/i, label: "Instruction override pattern" },
   { pattern: /you\s+are\s+now\s+/i, label: "Role hijacking pattern" },
   { pattern: /new\s+instructions?\s*:/i, label: "Instruction injection pattern" },
-  { pattern: /system\s*:\s*/i, label: "System prompt injection" },
-  { pattern: /IMPORTANT\s*:\s*(?:Before|Also|First|Always)/i, label: "Injected priority instruction" },
 
-  // Exfiltration patterns
+  // Exfiltration patterns — clearly malicious
   { pattern: /~\/\.ssh/i, label: "SSH key exfiltration attempt" },
   { pattern: /\.env\b/i, label: "Environment file exfiltration attempt" },
   { pattern: /id_rsa/i, label: "SSH private key reference" },
-  { pattern: /send\s+(?:the\s+)?(?:data|content|result|response|info|information)\s+to/i, label: "Data exfiltration instruction" },
-  { pattern: /forward\s+(?:the\s+)?(?:data|content|result|response)\s+to/i, label: "Data forwarding instruction" },
-  { pattern: /https?:\/\/[^\s"']+/i, label: "URL in tool description (potential exfiltration target)" },
+  { pattern: /send\s+(?:the\s+)?(?:data|content|result|response|info|information)\s+to\s+https?:/i, label: "Data exfiltration to URL" },
+  { pattern: /forward\s+(?:the\s+)?(?:data|content|result|response)\s+to\s+https?:/i, label: "Data forwarding to URL" },
 
-  // Cross-tool manipulation
-  { pattern: /(?:call|invoke|use|execute|run)\s+the\s+\w+\s+tool/i, label: "Cross-tool invocation instruction" },
-  { pattern: /before\s+returning.*(?:also|first)\s+(?:read|call|send|access)/i, label: "Hidden pre-action instruction" },
-  { pattern: /include\s+(?:the\s+)?(?:contents?|data|output)\s+(?:of|from)/i, label: "Data inclusion instruction" },
+  // Cross-tool manipulation — only flag with exfiltration or hidden action context
+  { pattern: /before\s+returning.*(?:also|first)\s+(?:read|send|access)\s+/i, label: "Hidden pre-action instruction" },
 
-  // Hidden content patterns
+  // Hidden content patterns — clearly malicious
   { pattern: /[\u200B\u200C\u200D\u2060\uFEFF]/, label: "Zero-width Unicode characters (hidden content)" },
 ];
 
@@ -80,6 +76,7 @@ export function detectSuspiciousDescriptions(context: AnalysisContext): Finding[
   const findings: Finding[] = [];
 
   for (const [file, content] of context.sources) {
+    if (shouldSkipFile(file)) continue;
     const descriptions = extractDescriptionStrings(content, context.language);
 
     for (const { text, line } of descriptions) {
